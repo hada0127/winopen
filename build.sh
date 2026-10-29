@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 NAME="윈도우경로열기"
-APP="$HOME/Applications/$NAME.app"
+APP="/Applications/$NAME.app"
 BUILD=build/$NAME.app
 
 rm -rf build && mkdir -p "$BUILD/Contents/MacOS" "$BUILD/Contents/Resources"
@@ -28,7 +28,8 @@ EOF
 codesign --force --sign - "$BUILD"
 
 pkill -x WinOpen 2>/dev/null || true
-rm -rf "$APP" && mkdir -p "$HOME/Applications" && cp -R "$BUILD" "$APP"
+rm -rf "$APP" && cp -R "$BUILD" "$APP"
+rm -rf "$HOME/Applications/$NAME.app"   # 예전 설치 위치 정리
 if [ -d "$HOME/bin" ]; then
   cp winopen "$HOME/bin/winopen" && chmod +x "$HOME/bin/winopen" || echo "경고: ~/bin/winopen 복사 실패" >&2
 fi

@@ -21,7 +21,7 @@ macOS 13 이상, Xcode 명령줄 도구(`swiftc`)가 필요합니다.
 ```bash
 git clone https://github.com/hada0127/winopen.git
 cd winopen
-./build.sh          # ~/Applications/윈도우경로열기.app 설치 후 실행, ~/bin 이 있으면 winopen CLI 도 복사
+./build.sh          # /Applications/윈도우경로열기.app 설치 후 실행, ~/bin 이 있으면 winopen CLI 도 복사
 ```
 
 ### 권한
