@@ -217,6 +217,8 @@ func openFinderTab(dir: String, select: String?) -> Bool {
         Thread.sleep(forTimeInterval: 0.05)
     }
     guard front else { return false }
+    // 포커스된 파인더 창이 없으면 ⌘T 가 새 «창»을 연다 → 가장 앞의 기존 창을 손쉬운 사용 API 로 올리고 포커스를 준다
+    guard focusFrontFinderWindow(pid: finder.processIdentifier) else { return false }
     let src = CGEventSource(stateID: .combinedSessionState)
     let kT: CGKeyCode = 17
     let down = CGEvent(keyboardEventSource: src, virtualKey: kT, keyDown: true)
@@ -232,6 +234,32 @@ func openFinderTab(dir: String, select: String?) -> Bool {
     var script = "tell application \"Finder\" to set target of front Finder window to (POSIX file \"\(asQuoted(dir))\" as alias)"
     if let sel = select { script += "\ntell application \"Finder\" to select (POSIX file \"\(asQuoted(sel))\" as alias)" }
     return runOsascript(script + "\nreturn \"ok\"") == "ok"
+}
+
+func focusFrontFinderWindow(pid: pid_t) -> Bool {
+    let app = AXUIElementCreateApplication(pid)
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
+          let wins = value as? [AXUIElement] else { return false }
+    // 표준 창(파일 브라우저)만. 데스크탑·정보 창 등은 건너뛴다
+    guard let win = wins.first(where: { w in
+        var sub: CFTypeRef?
+        AXUIElementCopyAttributeValue(w, kAXSubroleAttribute as CFString, &sub)
+        var minimized: CFTypeRef?
+        AXUIElementCopyAttributeValue(w, kAXMinimizedAttribute as CFString, &minimized)
+        return (sub as? String) == (kAXStandardWindowSubrole as String) && (minimized as? Bool) != true
+    }) else { return false }
+    AXUIElementPerformAction(win, kAXRaiseAction as CFString)
+    AXUIElementSetAttributeValue(win, kAXMainAttribute as CFString, kCFBooleanTrue)
+    AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, win)
+    // 포커스가 실제로 그 창에 갔는지 확인
+    for _ in 0..<20 {
+        var fw: CFTypeRef?
+        if AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &fw) == .success,
+           let f = fw, CFEqual(f, win) { return true }
+        Thread.sleep(forTimeInterval: 0.05)
+    }
+    return false
 }
 
 func asQuoted(_ s: String) -> String {
