@@ -192,6 +192,52 @@ func finderSelection() -> String? {
     return runOsascript(src)
 }
 
+func runTool(_ exe: String, _ args: [String]) {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: exe)
+    p.arguments = args
+    try? p.run()
+    p.waitUntilExit()
+}
+
+func finderWindowCount() -> Int? {
+    runOsascript("tell application \"Finder\" to count of Finder windows").flatMap { Int($0) }
+}
+
+// 파인더 새 탭: 파인더를 앞으로 → ⌘T(앱이 직접 보낸다, 손쉬운 사용 권한) → 탭이 생겼는지 확인 → 위치 지정.
+// 하나라도 확인이 안 되면 false(호출 쪽이 새 창으로 연다). 메인 스레드 밖에서만 부른다.
+func openFinderTab(dir: String, select: String?) -> Bool {
+    guard let before = finderWindowCount(), before > 0,
+          let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first
+    else { return false }
+    finder.activate()
+    var front = false
+    for _ in 0..<40 {
+        if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder" { front = true; break }
+        Thread.sleep(forTimeInterval: 0.05)
+    }
+    guard front else { return false }
+    let src = CGEventSource(stateID: .combinedSessionState)
+    let kT: CGKeyCode = 17
+    let down = CGEvent(keyboardEventSource: src, virtualKey: kT, keyDown: true)
+    let up = CGEvent(keyboardEventSource: src, virtualKey: kT, keyDown: false)
+    down?.flags = .maskCommand; up?.flags = .maskCommand
+    down?.postToPid(finder.processIdentifier); up?.postToPid(finder.processIdentifier)
+    var made = false
+    for _ in 0..<20 {
+        Thread.sleep(forTimeInterval: 0.1)
+        if let n = finderWindowCount(), n > before { made = true; break }
+    }
+    guard made else { return false }
+    var script = "tell application \"Finder\" to set target of front Finder window to (POSIX file \"\(asQuoted(dir))\" as alias)"
+    if let sel = select { script += "\ntell application \"Finder\" to select (POSIX file \"\(asQuoted(sel))\" as alias)" }
+    return runOsascript(script + "\nreturn \"ok\"") == "ok"
+}
+
+func asQuoted(_ s: String) -> String {
+    s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+}
+
 func onBackground(_ work: @escaping () -> Void) { DispatchQueue.global(qos: .userInitiated).async(execute: work) }
 func onMain(_ work: @escaping () -> Void) { DispatchQueue.main.async(execute: work) }
 
@@ -345,19 +391,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         p.executableURL = URL(fileURLWithPath: "/bin/bash")
         p.arguments = [script, path]
         var env = ProcessInfo.processInfo.environment
-        env["WINOPEN_TAB"] = openInNewTab && accessibilityReady() ? "1" : "0"
+        env["WINOPEN_PRINT"] = "1"   // 스크립트는 마운트·경로 확정까지만, 여는 건 앱이 한다
         p.environment = env
+        let out = Pipe()
+        p.standardOutput = out
         let log = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Logs/WinOpen.log")
         if !FileManager.default.fileExists(atPath: log.path) { FileManager.default.createFile(atPath: log.path, contents: nil) }
         if let h = try? FileHandle(forWritingTo: log) {
             h.seekToEndOfFile()
             h.write("\(Date()) 열기: \(path)\n".data(using: .utf8)!)
-            p.standardOutput = h; p.standardError = h
+            p.standardError = h
         }
+        let wantTab = openInNewTab && accessibilityReady()
         p.terminationHandler = { proc in
+            let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             if proc.terminationStatus == 1 || proc.terminationStatus == 2 {
                 DispatchQueue.main.async { NSSound.beep() }
+                return
+            }
+            let line = text.components(separatedBy: "\n").first(where: { $0.contains("\t") }) ?? ""
+            let parts = line.split(separator: "\t", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { return }
+            let isFile = parts[0] == "file", target = parts[1]
+            onBackground {
+                let dir = isFile ? (target as NSString).deletingLastPathComponent : target
+                if wantTab && openFinderTab(dir: dir, select: isFile ? target : nil) { return }
+                runTool("/usr/bin/open", isFile ? ["-R", target] : [target])
             }
         }
         do { try p.run() } catch { alert("실행 실패", error.localizedDescription) }

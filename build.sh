@@ -25,7 +25,11 @@ cat > "$BUILD/Contents/Info.plist" <<EOF
   <key>NSAppleEventsUsageDescription</key><string>파인더 새 탭으로 폴더를 열고, 지금 열린 폴더·선택 항목의 경로를 읽어 즐겨찾기에 넣거나 윈도우 경로로 복사합니다.</string>
 </dict></plist>
 EOF
-codesign --force --sign - "$BUILD"
+# 서명: 키체인에 Apple Development 인증서가 있으면 그걸로(다시 빌드해도 손쉬운 사용·자동화 권한이 유지된다).
+# 없으면 ad-hoc — 빌드할 때마다 권한을 다시 줘야 한다. WINOPEN_SIGN_ID 로 직접 지정 가능.
+SIGN_ID=${WINOPEN_SIGN_ID:-$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development/ {print $2; exit}')}
+codesign --force --sign "${SIGN_ID:--}" "$BUILD"
+echo "서명: ${SIGN_ID:-ad-hoc}"
 
 pkill -x WinOpen 2>/dev/null || true
 rm -rf "$APP" && cp -R "$BUILD" "$APP"

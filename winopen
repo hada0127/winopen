@@ -122,6 +122,8 @@ end run
 APPLESCRIPT
 }
 show() {  # $1=dir|file $2=경로
+  # WINOPEN_PRINT=1: 열지 않고 「dir|file<탭>경로」만 출력(메뉴바 앱이 직접 새 탭으로 연다)
+  if [ -n "${WINOPEN_PRINT-}" ]; then printf '%s\t%s\n' "$1" "$2"; return; fi
   if [ "$1" = file ]; then
     open_in_tab "$(dirname "$2")" "$2" || open -R "$2"
   else
