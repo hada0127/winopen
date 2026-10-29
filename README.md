@@ -19,14 +19,8 @@
 [최신 릴리스](https://github.com/hada0127/winopen/releases/latest)에서 ZIP 을 받아 압축을 풀고 `윈도우경로열기.app` 을 응용 프로그램 폴더로 옮겨 실행하세요.
 macOS 13 이상, Apple Silicon·Intel 공용(유니버설)입니다.
 
-배포 파일은 ad-hoc 서명이고 Apple 공증을 받지 않았습니다. 처음 열 때 「확인되지 않은 개발자」 경고가 뜨면
-시스템 설정 → 개인정보 보호 및 보안 아래쪽의 「그래도 열기」를 누르거나, 터미널에서 아래를 한 번 실행하세요.
+배포 파일은 Developer ID 서명과 Apple 공증을 마쳤습니다.
 
-```bash
-xattr -dr com.apple.quarantine /Applications/윈도우경로열기.app
-```
-
-ad-hoc 서명이라 새 버전으로 바꾸면 손쉬운 사용 권한을 다시 켜야 할 수 있습니다(목록에서 지우고 다시 추가).
 CLI 만 쓰려면 릴리스의 `winopen` 파일을 `PATH` 안에 두고 실행 권한을 주세요.
 
 ## 소스에서 설치
@@ -64,7 +58,9 @@ cd winopen
 ## 릴리스 만들기
 
 ```bash
-./release.sh        # dist/ 에 유니버설 · ad-hoc 서명 ZIP, winopen, SHA256SUMS
+WINOPEN_TEAM_ID=<팀 ID> WINOPEN_SIGN_ID="Apple Development: …" ./release.sh
+# 유니버설 빌드 → Developer ID 서명 → 공증 → 스테이플 → dist/ (ZIP, winopen, SHA256SUMS)
+# Xcode 에 해당 팀 계정이 로그인돼 있어야 한다. WINOPEN_NOTARIZE=0 이면 공증 없이 ad-hoc ZIP
 ```
 
 ## 라이선스
